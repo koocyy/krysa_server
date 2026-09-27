@@ -1,7 +1,10 @@
 #the brain.
 import sqlite3
+import rsa
+import os
 from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
+from keys import gen_keys
 
 api = FastAPI()
 conn = sqlite3.connect("data.db", check_same_thread=False)
@@ -10,6 +13,13 @@ cur = conn.cursor()
 class CreateUser(BaseModel):
     nick: str
     key: str
+
+#CHECK if server keys are available/generated.
+if os.path.exists(f"public.pem") and os.path.exists(f"private.pem"):
+    print("----KEYS-OK----")
+else:
+    print("----KEYS-GENERATED----")
+    gen_keys()
 
 cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT NOT NULL, nick TEXT NOT NULL UNIQUE, key TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);")
 conn.commit()
@@ -22,7 +32,6 @@ def create_user(user: CreateUser, request: Request):
     acc_count = len(cur.fetchall())
     if acc_count>=3:
         raise HTTPException(status_code=409, detail="Account count limit reached. (3)")
-
     else:
         try:
             cur.execute("INSERT INTO users (ip, nick, key) VALUES (?, ?, ?)", (ip, user.nick, user.key))
@@ -30,6 +39,14 @@ def create_user(user: CreateUser, request: Request):
         except sqlite3.IntegrityError:
             raise HTTPException(status_code=409, detail="Nick already taken")
         return {"status": "created", "nick": user.nick}
+
+@api.get('/public-key')
+def serve_public_key():
+    with open(f"public.pem", "r") as p_key:
+        public_key = p_key.read()
+    return public_key
+
+
 
 
 
