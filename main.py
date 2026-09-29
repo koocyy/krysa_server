@@ -13,6 +13,7 @@ cur = conn.cursor()
 class CreateUser(BaseModel):
     nick: str
     key: str
+    passw: str
 
 #CHECK if server keys are available/generated.
 if os.path.exists(f"public.pem") and os.path.exists(f"private.pem"):
@@ -21,7 +22,7 @@ else:
     print("----KEYS-GENERATED----")
     gen_keys()
 
-cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT NOT NULL, nick TEXT NOT NULL UNIQUE, key TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);")
+cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT NOT NULL, nick TEXT NOT NULL UNIQUE, password TEXT NOT NULL, key TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);")
 conn.commit()
 
 @api.post('/cr-usr/')
@@ -34,7 +35,7 @@ def create_user(user: CreateUser, request: Request):
         raise HTTPException(status_code=409, detail="Account count limit reached. (3)")
     else:
         try:
-            cur.execute("INSERT INTO users (ip, nick, key) VALUES (?, ?, ?)", (ip, user.nick, user.key))
+            cur.execute("INSERT INTO users (ip, nick, key, password) VALUES (?, ?, ?, ?)", (ip, user.nick, user.key, user.passw))
             conn.commit()
         except sqlite3.IntegrityError:
             raise HTTPException(status_code=409, detail="Nick already taken")
