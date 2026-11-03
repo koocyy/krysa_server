@@ -20,7 +20,9 @@ conn.execute("PRAGMA synchronous=NORMAL;")
 conn.execute("PRAGMA busy_timeout=5000;")
 cur = conn.cursor()
 
+SESSION_TTL = 86400
 LOGIN_CHALLENGE_TTL = 60
+sessions = {}
 login_challenges = {}
 
 
@@ -40,6 +42,12 @@ class LoginFinish(BaseModel):
     enc_password_b64: str
 
 
+class UserInteract(BaseModel):
+    nick: str
+    session: str
+    data: str
+
+
 #CHECK if server keys are available/generated.
 if os.path.exists("public.pem") and os.path.exists("private.pem"):
     print("----KEYS-OK----")
@@ -52,6 +60,10 @@ conn.commit()
 
 
 def _new_challenge(length: int = 12) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+def _new_session(length: int = 20) -> str:
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
@@ -115,7 +127,25 @@ def login_finish(user: LoginFinish):
     if row is None or not hmac.compare_digest(row[0], plaintext_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return {"status": "ok"}
+    session_id = _new_session()
+    session_exp = time.time() + SESSION_TTL
+    sessions[user.nick] = {"session_id": session_id, "exp": session_exp}
+
+    return {"status": "ok", "session_id": session_id, "exp": session_exp}
+
+@api.post('/message/send')
+def send_message(user: UserInteract):
+    session = sessions.get(user.nick)
+    if session["session_id"]==user.session:
+        return {"status": "ok"}
+
+    elif user.session is None:
+        raise HTTPException(status_code=401, detail="No session id supplied")
+
+    else:
+        raise HTTPException(status_code=401, detail="Invalid session id")
+
+
 
 
 @api.get('/public-key')
